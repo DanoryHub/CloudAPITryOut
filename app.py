@@ -1,17 +1,18 @@
-from flask import Flask, request
+from flask import Flask
 from flask_restful import Resource, Api, reqparse
-from flask_jwt import JWT, jwt_required
+from flask_sqlalchemy import SQLAlchemy
 
-from security import authenticate, identity
+from db_config import db_url_getter
+from models import db, Items
 
 app = Flask(__name__)
-app.secret_key = "jose"
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url_getter.get_postgres_url()
+db.init_app(app)
 api = Api(app)
 
-jwt = JWT(app, authenticate, identity) # /auth
+with app.app_context():
+    db.create_all()
 
-# "Database" :D
-items = []
 
 #Resources
 class Item(Resource):
@@ -21,48 +22,79 @@ class Item(Resource):
         type=float,
         required=True,
     )
+    parser.add_argument(
+        'name',
+        type=str,
+        required=True
+    )
         
-    @jwt_required()
-    def get(self, name):
-        item = next(filter(lambda x: x['name'] == name, items), None)
-        return {'item': item}
+    def get(self, _id):
+        item = Items.query.filter_by(_id=_id).one()
+        return {
+            'item': 
+                {
+                    '_id': item._id,
+                    'name': item.name,
+                    'price': item.price
+                }
+            }
     
-    def post(self, name):
-        if next(filter(lambda x: x['name'] == name, items), None) is not None:
-            return {'message': f"Item with name '{name}' already exists"}, 400
+    def post(self, _id):
+        if Items.query.filter_by(_id=_id).one_or_none() is not None:
+            return {'message': f"Item with id '{_id}' already exists"}, 400
         
         data = Item.parser.parse_args()
         
-        item = {
-            'name': name, 
-            'price': data['price']
-            }
+        item = Items(name=data['name'], price=data['price'])
 
-        items.append(item)
-        return item 
+        db.session.add(item)
+        db.session.commit()
+
+
+        return {
+            '_id': item._id,
+            'name': item.name,
+            'price': item.price 
+            } 
     
-    def delete(self, name):
-        global items
-        items = list(filter(lambda x: x['name'] != name, items))
+    def delete(self, _id):
+        Items.query.filter_by(_id=_id).delete()
+        db.session.commit()
         return {'message': 'Item deleted'}
     
-    def put(self, name):
+    def put(self, _id):
         data = Item.parser.parse_args()
 
-        item = next(filter(lambda x: x['name'] == name, items), None)
+        item = Items.query.filter_by(_id=_id).one_or_none()
         if not item:
-            item = {'name': name, 'price': data['price']}
-            items.append(item)
+            item = Items(name=data['name'], price=data['price'])
+            db.session.add(item)
         else:
-            item.update(data)
-        return item
+            Items.query.filter_by(_id=_id).update({'name': data['name'], 'price': data['price']})
+        db.session.commit()
+        return {
+            '_id': item._id,
+            'name': item.name,
+            'price': item.price
+        }
 
 
 class ItemList(Resource):
     def get(self):
-        return {'items': items}
+        items = Items.query.all()
+        bunch_of_items = {
+            'items':[]
+        }
+        for item in items:
+            item_dict = {
+                '_id': item._id,
+                'name': item.name,
+                'price': item.price
+            }
+            bunch_of_items['items'].append(item_dict)
+        return bunch_of_items
 # Endpoints 
 api.add_resource(ItemList, '/items')
-api.add_resource(Item, '/items/<string:name>')
+api.add_resource(Item, '/items/<int:_id>')
 
-app.run(port=8000, debug=True)
+app.run(port=8000, host="0.0.0.0", debug=True)
