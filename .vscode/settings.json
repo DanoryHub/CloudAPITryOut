@@ -1,7 +1,0 @@
-{
-    "python.pythonPath": "/Users/ivanmetelskij/Desktop/CloudAPITryOut/venv/bin/python3.8",
-    "python.linting.pylintArgs": [
-        "--load-plugins",
-        "pylint-flask"
-    ]
-}
