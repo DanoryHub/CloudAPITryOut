@@ -97,4 +97,4 @@ class ItemList(Resource):
 api.add_resource(ItemList, '/items')
 api.add_resource(Item, '/items/<int:_id>')
 
-app.run(port=8000, host="0.0.0.0", debug=True)
+app.run(port=8000, host="0.0.0.0")
